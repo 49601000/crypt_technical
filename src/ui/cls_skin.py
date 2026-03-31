@@ -1,11 +1,19 @@
+import os
+import sys
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# 分析対象のティッカーリスト (ここを編集して対象を増やせます)
+# 単体実行およびルートモジュールの読み込み準備
+_DIR = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.abspath(os.path.join(_DIR, "..", ".."))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
+# 分析対象のティッカーリスト
 TICKERS = ["SOL-JPY", "HBAR-JPY", "SOL-USD", "HBAR-USD"]
 
-# 内部モジュールのインポート
+# ─── 内部モジュールのインポート ───
 from output_crypt_tech import get_report_by_ticker, get_full_analysis_report
 from output_crypt_news import get_latest_news_from_db
 

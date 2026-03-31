@@ -1,6 +1,15 @@
+import os
+import sys
 import yfinance as yf
 import pandas as pd
 from typing import Dict, List, Any, Optional
+
+# 単体実行時のインポートパス調整
+if __name__ == "__main__":
+    _root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    if _root not in sys.path:
+        sys.path.insert(0, _root)
+
 from src.utils.crypt_dic_error import get_error_response
 
 # デフォルト設定 (通貨ごとのティッカーと丸め精度)

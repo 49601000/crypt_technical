@@ -7,6 +7,11 @@ _ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 if _ROOT_DIR not in sys.path:
     sys.path.insert(0, _ROOT_DIR)
 
+# 親ディレクトリも追加（パッケージ競合回避用）
+_PARENT_DIR = os.path.dirname(_ROOT_DIR)
+if _PARENT_DIR not in sys.path:
+    sys.path.append(_PARENT_DIR)
+
 
 # ─── UI設定の永続化（ファイルベース） ───────────────────────
 _PREF_FILE = os.path.join(_ROOT_DIR, ".ui_preference")
@@ -102,8 +107,11 @@ def _load_ui_module(module_path: str):
     """動的インポート。"""
     import importlib
     try:
+        # すでに sys.modules にある場合、KeyError やリロード不備を防ぐために強制削除
+        if module_path in sys.modules:
+            del sys.modules[module_path]
         return importlib.import_module(module_path)
-    except ModuleNotFoundError as e:
+    except Exception as e:
         st.error(f"UIモジュールの読み込みに失敗しました: `{module_path}`\n\n{e}")
         return None
 

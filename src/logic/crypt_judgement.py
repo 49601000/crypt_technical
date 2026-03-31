@@ -1,8 +1,16 @@
+import os
+import sys
 import pandas as pd
 import pandas_ta as ta
 import yfinance as yf
 import datetime
 from typing import Dict, Any, Optional
+
+# 単体実行時のインポートパス調整
+if __name__ == "__main__":
+    _root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    if _root not in sys.path:
+        sys.path.insert(0, _root)
 
 # 既存モジュールのインポート
 from src.logic.crypt_analytics import analyze_market

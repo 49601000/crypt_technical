@@ -6,6 +6,8 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Union, Optional
 from googletrans import Translator
 from src.utils.crypt_dic_error import get_error_response
+from src.logic.crypt_sentiment_models import SessionLocal, Article
+from src.logic.crypt_sentiment import analyze_sentiment
 
 # ─── 設定 ───────────────────────────────────────────────────
 
@@ -199,6 +201,59 @@ def get_crypto_news(symbol: str, count: int = 20, before_date: datetime = None) 
     translated_news = _translate_titles_batch(target_news)
     
     return translated_news
+
+def update_news_to_db(ticker: str, count: int = 20) -> int:
+    """
+    ニュースを取得し、感情分析を行った上でデータベースに保存します。
+    新規に保存された記事の件数を返します。
+    ※ ticker は正規化済み（例: 'SOL'）であることを想定しています。
+    """
+    added_count = 0
+    # 1. ニュースの取得 (yfinance用のシンボルを一時的に作成)
+    fetch_symbol = f"{ticker}-USD"
+    news_list = get_crypto_news(fetch_symbol, count)
+    
+    if not news_list:
+        return 0
+
+    # 2. データベースへの保存
+    try:
+        with SessionLocal() as session:
+            for item in news_list:
+                # URLで重複チェック
+                exists = session.query(Article).filter(Article.url == item["url"]).first()
+                if exists:
+                    continue
+                
+                # 感情分析 (翻訳後のタイトルがあればそれを使用)
+                analysis_text = item.get("title_jp") or item.get("title", "")
+                analysis_lang = "ja" if item.get("title_jp") else "en"
+                label, score = analyze_sentiment(analysis_text, analysis_lang)
+                
+                # 新規記事の作成
+                new_article = Article(
+                    ticker=ticker.upper(),
+                    title=item["title"],
+                    url=item["url"],
+                    source=item["source"],
+                    published_at=item["published_at"],
+                    sentiment=label,
+                    score=score,
+                    lang=analysis_lang,
+                    is_processed=True
+                )
+                session.add(new_article)
+                added_count += 1
+            
+            if added_count > 0:
+                session.commit()
+                
+    except Exception as e:
+        print(f"Error saving news to DB: {e}")
+        # 必要に応じて上位に例外を投げるか、エラーレスポンスを検討
+        raise e
+
+    return added_count
 
 if __name__ == "__main__":
     # 簡易テスト

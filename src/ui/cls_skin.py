@@ -16,6 +16,7 @@ TICKERS = ["SOL-JPY", "HBAR-JPY", "SOL-USD", "HBAR-USD"]
 # ─── 内部モジュールのインポート ───
 from output_crypt_tech import get_report_by_ticker, get_full_analysis_report
 from output_crypt_news import get_latest_news_from_db
+from src.data.crypt_news_loader import update_news_to_db
 
 # ─── ページ設定 / スタイル (cls_main.py から継承) ─────────────────────────
 
@@ -421,6 +422,28 @@ def run():
         ticker = st.selectbox("Ticker", TICKERS)
         period = st.selectbox("Data Period", ["300d", "100d", "1y", "2y"])
         btn = st.button("Run Analysis", use_container_width=True)
+        
+        st.markdown("---")
+        if st.button("♻️ ニュースを更新", use_container_width=True):
+            try:
+                # 1. ティッカーの正規化 (UI側の責務)
+                # "SOL-JPY" -> "SOL"
+                normalized_ticker = ticker.split("-")[0].upper()
+                
+                with st.spinner(f"{normalized_ticker} のニュースを取得中..."):
+                    # 2. ロジック実行 (DB保存件数を取得)
+                    added_count = update_news_to_db(normalized_ticker)
+                    
+                    # 3. ユーザーフィードバック
+                    if added_count > 0:
+                        st.toast(f"✅ {added_count}件の新しいニュースを仕入れました！")
+                    else:
+                        st.toast("☁️ 新しいニュースはありませんでした（最新の状態です）")
+                    
+                    # 4. 画面更新
+                    st.rerun()
+            except Exception as e:
+                st.error(f"ニュースの更新中にエラーが発生しました: {e}")
 
     if btn or "report" in st.session_state:
         if btn:

@@ -53,7 +53,10 @@ def evaluate_investment(analysis_result: Dict[str, Any], symbol: str = "UNKNOWN"
                 "veto_reasons": vetos if is_veto else {}
             }
         },
-        "market_snapshot": analysis_result.get("market_snapshot", {})
+        "market_snapshot": {
+            **analysis_result.get("market_snapshot", {}),
+            "ticker": symbol
+        }
     }
 
 if __name__ == "__main__":

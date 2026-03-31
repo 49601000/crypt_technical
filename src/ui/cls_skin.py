@@ -361,15 +361,28 @@ def render_crypto_report(report):
     """
     _setup_style()
     
-    judgement = report["level_1_judgement"]
-    breakdown = report["level_2_score"]
-    indicators = report["level_3_indicators"]
+    if not report:
+        st.warning("⚠️ 表示する分析データがありません。")
+        return
+
+    # データを安全に取得
+    judgement = report.get("level_1_judgement", {})
+    breakdown = report.get("level_2_score", {})
+    indicators = report.get("level_3_indicators", {})
     descriptions = report.get("descriptions", {})
+    
+    # judgement が空の場合はエラー表示
+    if not judgement:
+        st.error("🚨 分析結果 (Judgement) の取得に失敗しました。")
+        return
     
     st.markdown('<div class="cs-title">crypto<span>SIGNAL</span></div>', unsafe_allow_html=True)
     st.markdown('<div class="cs-sub">Technical Scoring Skin — Classic Style</div>', unsafe_allow_html=True)
     
-    render_crypto_header(judgement["market_snapshot"], judgement["timestamp"])
+    # 各コンポーネントをレンダリング（snapshot も安全に取得）
+    snapshot = judgement.get("market_snapshot", {})
+    timestamp = judgement.get("timestamp", "—")
+    render_crypto_header(snapshot, timestamp)
     
     tab_score, tab_analysis, tab_news = st.tabs(["🎯 score", "🔍 analysis", "📰 news"])
     
@@ -378,9 +391,11 @@ def render_crypto_report(report):
         
     with tab_analysis:
         render_analysis_tab(indicators, descriptions)
-
+    
     with tab_news:
-        render_news_tab(judgement["market_snapshot"]["ticker"])
+        # ticker を安全に取得し、render_news_tab に渡す
+        target_ticker = snapshot.get("ticker", "UNKNOWN")
+        render_news_tab(target_ticker)
 
 def run():
     """Streamlit アプリケーションのエントリーポイント"""

@@ -213,10 +213,12 @@ def render_crypto_header(snapshot, timestamp):
     close = snapshot.get("last_close", 0)
     period = snapshot.get("data_period", "—")
     
+    symbol = "¥" if "JPY" in ticker else "$"
+    
     st.markdown(f"""
     <div class="price-header">
       <div class="price-ticker">{ticker} <span style="font-size:0.75rem; color:var(--text-3); margin-left:15px;">Period: {period} / Report: {timestamp}</span></div>
-      <div class="price-main">${_fmt(close, 2)}</div>
+      <div class="price-main">{symbol}{_fmt(close, 2)}</div>
     </div>
     """, unsafe_allow_html=True)
 

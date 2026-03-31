@@ -6,7 +6,7 @@ from datetime import datetime
 TICKERS = ["SOL-JPY", "HBAR-JPY", "SOL-USD", "HBAR-USD"]
 
 # 内部モジュールのインポート
-from output_crypt_tech import get_report_by_ticker
+from output_crypt_tech import get_report_by_ticker, get_full_analysis_report
 from output_crypt_news import get_latest_news_from_db
 
 # ─── ページ設定 / スタイル (cls_main.py から継承) ─────────────────────────

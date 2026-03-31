@@ -1,0 +1,18 @@
+# UI/Framework
+streamlit # Web interface framework
+
+# Data Acquisition & Analysis
+yfinance # Fetching market data from Yahoo Finance
+pandas # Data manipulation and analysis
+pandas_ta # Technical analysis indicators and utilities
+numpy # Numerical computing
+
+# News Retrieval & Translation
+googletrans==4.0.0-rc1 # Batch translation of news titles (Version fixed for stability)
+legacy-cgi # Compatibility for Python 3.13+ (Required for internal CGI-dependent logic)
+
+# Database & ORM
+SQLAlchemy # Database interaction and ORM for news storage
+
+# Networking
+requests # HTTP communications for external APIs

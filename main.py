@@ -132,8 +132,6 @@ def render_selector():
     return selected_key
 
 def main():
-    apply_webclip_config(_ROOT_DIR)
-
     if "ui_key" not in st.session_state:
         saved = _load_ui_preference()
         st.session_state["ui_key"] = saved if (saved and saved in _UI_MAP) else None
@@ -149,6 +147,7 @@ def main():
 
     if current_key is None:
         chosen = render_selector()
+        apply_webclip_config(_ROOT_DIR)
         if chosen:
             st.session_state["ui_key"] = chosen
             _save_ui_preference(chosen)
@@ -174,6 +173,7 @@ def main():
 
     # スキンの実行
     mod.run()
+    apply_webclip_config(_ROOT_DIR)
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,17 @@
+[webclip]
+# true にすると iPhone ホーム画面用のアイコン設定を適用
+enabled = true
+
+# ホーム画面に追加したときの表示名
+app_title = "仮想通貨の押し目チェッカー"
+
+# 任意画像の指定方法（どちらか一方を使用）
+# 1) ローカル画像パス（プロジェクトルートからの相対パス or 絶対パス）
+icon_path = "config/ios_home_icon.png"
+# 2) 公開URL画像
+icon_url = ""
+
+# 目安: iOS は 180x180 PNG 推奨
+icon_size = "180x180"
+theme_color = "#0f1117"
+background_color = "#0f1117"

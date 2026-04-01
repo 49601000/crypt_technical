@@ -1,6 +1,7 @@
 import sys
 import os
 import streamlit as st
+from src.ui.webclip_config import apply_webclip_config
 
 # ─── パス設定（ProjectRoot を sys.path に追加） ───
 _ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -131,6 +132,8 @@ def render_selector():
     return selected_key
 
 def main():
+    apply_webclip_config(_ROOT_DIR)
+
     if "ui_key" not in st.session_state:
         saved = _load_ui_preference()
         st.session_state["ui_key"] = saved if (saved and saved in _UI_MAP) else None

@@ -306,7 +306,7 @@ def render_news_tab(ticker):
     st.session_state.news_list に格納されたニュースを表示します。
     """
     if "news_list" not in st.session_state:
-        st.info("← サイドバーから『Run Analysis』をクリックして、最新情報を取得してください。")
+        st.info("↑ 上部の『Run Analysis』をクリックして、最新情報を取得してください。")
         return
 
     news_list = st.session_state.news_list
@@ -421,30 +421,41 @@ def run():
         st.error("分析モジュール (output_crypt_tech.py) が見つかりません。")
         return
 
-    # サイドバーでティッカー設定
-    with st.sidebar:
-        st.title("Settings")
-        ticker = st.selectbox("Ticker", TICKERS)
-        period = st.selectbox("Data Period", ["300d", "100d", "1y", "2y"])
-        btn = st.button("Run Analysis", use_container_width=True)
-        
-        st.markdown("---")
-        if st.button("♻️ ニュースを更新", use_container_width=True):
-            try:
-                with st.spinner(f"{ticker} のニュースを取得中..."):
-                    # 2. ロジック実行 (DB保存件数を取得)
-                    added_count = update_news_to_db(ticker)
-                    
-                    # 3. ユーザーフィードバック
-                    if added_count > 0:
-                        st.toast(f"✅ {added_count}件の新しいニュースを仕入れました！")
-                    else:
-                        st.toast("☁️ 新しいニュースはありませんでした（最新の状態です）")
-                    
-                    # 4. 画面更新
-                    st.rerun()
-            except Exception as e:
-                st.error(f"ニュースの更新中にエラーが発生しました: {e}")
+    period_options = ["300d", "100d", "1y", "2y"]
+    if "ui_ticker" not in st.session_state:
+        st.session_state.ui_ticker = TICKERS[0]
+    if "ui_period" not in st.session_state:
+        st.session_state.ui_period = period_options[0]
+
+    st.markdown("### Controls")
+    col_ticker, col_period, col_run, col_refresh = st.columns([2.0, 1.5, 1.2, 1.6])
+    with col_ticker:
+        ticker = st.selectbox("Ticker", TICKERS, key="ui_ticker")
+    with col_period:
+        period = st.selectbox("Data Period", period_options, key="ui_period")
+    with col_run:
+        st.write("")
+        btn = st.button("Run Analysis", use_container_width=True, type="primary")
+    with col_refresh:
+        st.write("")
+        refresh_news = st.button("♻️ ニュースを更新", use_container_width=True)
+
+    if refresh_news:
+        try:
+            with st.spinner(f"{ticker} のニュースを取得中..."):
+                # 2. ロジック実行 (DB保存件数を取得)
+                added_count = update_news_to_db(ticker)
+                
+                # 3. ユーザーフィードバック
+                if added_count > 0:
+                    st.toast(f"✅ {added_count}件の新しいニュースを仕入れました！")
+                else:
+                    st.toast("☁️ 新しいニュースはありませんでした（最新の状態です）")
+                
+                # 4. 画面更新
+                st.rerun()
+        except Exception as e:
+            st.error(f"ニュースの更新中にエラーが発生しました: {e}")
 
     if btn or "report" in st.session_state:
         if btn:
@@ -465,7 +476,7 @@ def run():
         
         render_crypto_report(st.session_state["report"])
     else:
-        st.info("← サイドバーからティッカーを入力して『Run Analysis』をクリックしてください。")
+        st.info("↑ 上部でティッカーを選択して『Run Analysis』をクリックしてください。")
 
 if __name__ == "__main__":
     run()

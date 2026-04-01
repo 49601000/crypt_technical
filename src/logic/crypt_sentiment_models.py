@@ -30,6 +30,7 @@ class Article(Base):
     id          = Column(Integer, primary_key=True, index=True)
     ticker      = Column(String(20), nullable=False, index=True)   # "AAPL", "7203.T"
     title       = Column(Text, nullable=False)
+    title_jp    = Column(Text, nullable=True) # 翻訳後のタイトル
     url         = Column(String(512), unique=True, nullable=False)
     source      = Column(String(50), nullable=False)               # "yahoo_finance", "reddit", etc.
     published_at= Column(DateTime, nullable=True, index=True)

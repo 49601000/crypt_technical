@@ -1,25 +1,12 @@
-import sys
-import os
-from pathlib import Path
-
-# --- パス設定 (ProjectRoot を sys.path に追加) ---
-_ROOT_DIR = str(Path(__file__).resolve().parent.parent.parent)
-if _ROOT_DIR not in sys.path:
-    sys.path.insert(0, _ROOT_DIR)
-
+import streamlit as st
 import requests
 import yfinance as yf
-import streamlit as st
-import time
 from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Any, Union, Optional
+from typing import List, Dict, Any, Optional
 from googletrans import Translator
-from src.utils.crypt_dic_error import get_error_response
-from src.logic.crypt_sentiment_models import SessionLocal, Article
-from src.logic.crypt_sentiment import analyze_sentiment
 
 # ─── 設定 ───────────────────────────────────────────────────
-
+MASSIVE_API_KEY = "YRCTpjNgCCmabpMcfVJhqF5vpcPc7Fnh"
 MASSIVE_NEWS_URL = "https://api.massive.com/v1/benzinga/v2/news"
 JST = timezone(timedelta(hours=9))
 SEPARATOR = " ||| "
@@ -67,9 +54,9 @@ def _translate_titles_batch(news_list: List[Dict[str, Any]]) -> List[Dict[str, A
                     res = translator.translate(news["title"], src='en', dest='ja')
                     news["title_jp"] = res.text
                 except Exception:
-                    news["title_jp"] = news["title"]  # 失敗時は原文
+                    news["title_jp"] = news["title"]
     except Exception as e:
-        print(f"Translation Error: {e}")
+        st.error(f"Translation Error: {e}")
         # 全体失敗時は原文をコピー
         for news in news_list:
             news["title_jp"] = news["title"]
@@ -78,13 +65,8 @@ def _translate_titles_batch(news_list: List[Dict[str, Any]]) -> List[Dict[str, A
 
 # ─── データソース 1: Massive API (Benzinga) ──────────────────
 
-def _fetch_massive_news(symbol: str, count: int, before_date: Optional[datetime]) -> List[Dict[str, Any]]:
+def _fetch_massive_news(symbol: str, count: int) -> List[Dict[str, Any]]:
     """Massive API から Benzinga ニュースを取得します。"""
-    try:
-        api_key = st.secrets["MASSIVE_API_KEY"]
-    except Exception:
-        return []
-
     base_symbol = symbol.split("-")[0].upper()
     
     params = {
@@ -92,23 +74,15 @@ def _fetch_massive_news(symbol: str, count: int, before_date: Optional[datetime]
         "pageSize": count
     }
     
-    # before_date がある場合は published_until を追加 (ISO 8601形式)
-    if before_date:
-        # datetime を UTC に変換してから文字列化
-        if before_date.tzinfo is not None:
-             before_date = before_date.astimezone(timezone.utc)
-        params["published_until"] = before_date.strftime("%Y-%m-%dT%H:%M:%SZ")
-
     headers = {
         "accept": "application/json",
-        "X-API-KEY": api_key
+        "X-API-KEY": MASSIVE_API_KEY
     }
 
     try:
         response = requests.get(MASSIVE_NEWS_URL, params=params, headers=headers, timeout=10)
         
         if response.status_code == 429:
-            # エラーレスポンスを返さず、空リストで通知 (上位でエラーハンドリングするため)
             st.warning("Massive API: Rate limit exceeded (5 requests/min). Showing yfinance news only.")
             return []
         
@@ -139,12 +113,12 @@ def _fetch_massive_news(symbol: str, count: int, before_date: Optional[datetime]
         return formatted
 
     except Exception as e:
-        print(f"Massive API Error: {e}")
+        st.error(f"Massive API Error: {e}")
         return []
 
 # ─── データソース 2: yfinance ───────────────────────────────
 
-def _fetch_yf_news(symbol: str, count: int, before_date: Optional[datetime]) -> List[Dict[str, Any]]:
+def _fetch_yf_news(symbol: str, count: int) -> List[Dict[str, Any]]:
     """yfinance からニュースを取得します。"""
     try:
         ticker = yf.Ticker(symbol)
@@ -152,13 +126,9 @@ def _fetch_yf_news(symbol: str, count: int, before_date: Optional[datetime]) -> 
         
         formatted = []
         for n in raw_news:
-            # yfinance v0.2.x+ の新しい構造への対応
             content = n.get("content", {})
             if content:
-                # 新しい構造
                 title = content.get("title", "No Title")
-                
-                # canonicalUrl または clickThroughUrl は辞書の場合がある
                 url_obj = content.get("canonicalUrl") or content.get("clickThroughUrl")
                 if isinstance(url_obj, dict):
                     url = url_obj.get("url")
@@ -173,12 +143,10 @@ def _fetch_yf_news(symbol: str, count: int, before_date: Optional[datetime]) -> 
                 
                 raw_date = content.get("pubDate")
                 try:
-                    # ISO 8601 形式: 2026-04-01T08:00:00Z
                     dt_utc = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
                 except (ValueError, TypeError):
                     dt_utc = datetime.now(timezone.utc)
             else:
-                # 旧構造
                 title = n.get("title", "No Title")
                 url = n.get("link")
                 source = n.get("publisher", "Yahoo Finance")
@@ -189,10 +157,6 @@ def _fetch_yf_news(symbol: str, count: int, before_date: Optional[datetime]) -> 
                     dt_utc = datetime.now(timezone.utc)
                 
             dt_jst = _utc_to_jst(dt_utc)
-            
-            if before_date and dt_jst >= _utc_to_jst(before_date):
-                continue
-
             if not url:
                 continue
 
@@ -206,23 +170,18 @@ def _fetch_yf_news(symbol: str, count: int, before_date: Optional[datetime]) -> 
         
         return formatted[:count]
     except Exception as e:
-        print(f"yfinance News Error: {e}")
+        st.error(f"yfinance News Error: {e}")
         return []
 
-# ─── メイン関数 ────────────────────────────────────────────
+# ─── メインロジック ────────────────────────────────────────────
 
-def get_crypto_news(symbol: str, count: int = 20, before_date: datetime = None) -> List[Dict[str, Any]]:
-    """
-    複数ソースからニュースを取得・統合・翻訳して返却します。
-    """
-    # 1. 各ソースから取得
-    massive_res = _fetch_massive_news(symbol, count, before_date)
-    yf_res = _fetch_yf_news(symbol, count, before_date)
+def get_crypto_news(symbol: str, count: int = 20) -> List[Dict[str, Any]]:
+    """複数ソースからニュースを取得・統合・翻訳して返却します。"""
+    massive_res = _fetch_massive_news(symbol, count)
+    yf_res = _fetch_yf_news(symbol, count)
     
-    # 2. 統合
     combined = massive_res + yf_res
     
-    # 3. 重複排除 (URL をキーにする)
     unique_news = []
     seen_urls = set()
     for item in combined:
@@ -231,89 +190,57 @@ def get_crypto_news(symbol: str, count: int = 20, before_date: datetime = None) 
             unique_news.append(item)
             seen_urls.add(url)
     
-    # 4. ソート (published_at の降順)
     unique_news.sort(key=lambda x: x["published_at"], reverse=True)
-    
-    # 5. 件数制限 (最大 count 件)
     target_news = unique_news[:count]
-    
-    # 6. 一括翻訳
     translated_news = _translate_titles_batch(target_news)
     
     return translated_news
 
-def update_news_to_db(ticker: str, count: int = 20) -> int:
-    """
-    ニュースを取得し、感情分析を行った上でデータベースに保存します。
-    新規に保存された記事の件数を返します。
-    ※ ticker は正規化済み（例: 'SOL'）であることを想定しています。
-    """
-    added_count = 0
-    # 1. ニュースの取得 (yfinance用のシンボルを一時的に作成)
-    fetch_symbol = f"{ticker}-USD"
-    news_list = get_crypto_news(fetch_symbol, count)
+# ─── Streamlit UI ─────────────────────────────────────────────
+
+def main():
+    st.set_page_config(page_title="Crypto News Viewer", page_icon="📰")
     
-    if not news_list:
-        return 0
+    st.title("📰 Crypto News Viewer")
+    st.markdown("Massive API and Yahoo Finance news retrieval test tool.")
 
-    # 2. データベースへの保存
-    try:
-        with SessionLocal() as session:
-            for item in news_list:
-                # URLで重複チェック
-                exists = session.query(Article).filter(Article.url == item["url"]).first()
-                if exists:
-                    continue
-                
-                # 感情分析 (翻訳後のタイトルがあればそれを使用)
-                analysis_text = item.get("title_jp") or item.get("title", "")
-                analysis_lang = "ja" if item.get("title_jp") else "en"
-                label, score = analyze_sentiment(analysis_text, analysis_lang)
-                
-                # 新規記事の作成
-                new_article = Article(
-                    ticker=ticker.upper(),
-                    title=item["title"],
-                    title_jp=item.get("title_jp"),
-                    url=item["url"],
-                    source=item["source"],
-                    published_at=item["published_at"],
-                    sentiment=label,
-                    score=score,
-                    lang=analysis_lang,
-                    is_processed=True
-                )
-                session.add(new_article)
-                added_count += 1
+    with st.sidebar:
+        st.header("Search Parameters")
+        ticker = st.text_input("Ticker Symbol (e.g., SOL, BTC, ETH)", value="SOL")
+        count = st.slider("Max News Count", 5, 50, 15)
+        fetch_btn = st.button("Fetch News")
+
+    if fetch_btn:
+        symbol = f"{ticker.upper()}-USD"
+        with st.spinner(f"Fetching news for {symbol}..."):
+            news_items = get_crypto_news(symbol, count)
             
-            if added_count > 0:
-                session.commit()
-                
-    except Exception as e:
-        print(f"Error saving news to DB: {e}")
-        # 必要に応じて上位に例外を投げるか、エラーレスポンスを検討
-        raise e
-
-    return added_count
+            if not news_items:
+                st.info("No news articles found.")
+            else:
+                st.success(f"Found {len(news_items)} news articles.")
+                for item in news_items:
+                    with st.container():
+                        # タイトル (翻訳があればそれを使用)
+                        disp_title = item.get("title_jp") or item.get("title")
+                        st.subheader(disp_title)
+                        
+                        # メタ情報
+                        col1, col2 = st.columns([1, 2])
+                        with col1:
+                            st.caption(f"📅 {item['display_date']}")
+                        with col2:
+                            st.caption(f"🔗 Source: {item['source']}")
+                        
+                        # リンク
+                        st.markdown(f"[Read full article]({item['url']})")
+                        
+                        # 原文 (翻訳がある場合)
+                        if "title_jp" in item and item["title_jp"] != item["title"]:
+                            with st.expander("Show original title"):
+                                st.write(item["title"])
+                        
+                        st.divider()
 
 if __name__ == "__main__":
-    # 簡易テスト
-    import os
-    # テスト時に st.secrets がない場合のダミー
-    if not os.path.exists(".streamlit/secrets.toml"):
-        print("Note: st.secrets is not configured, Massive API will be skipped.")
-    
-    test_symbol = "SOL-USD"
-    print(f"--- Fetching news for {test_symbol} ---")
-    news = get_crypto_news(test_symbol)
-    
-    if isinstance(news, dict) and news.get("status") == "error":
-        print(f"Error: {news['message']}")
-    elif not news:
-        print("No news found.")
-    else:
-        for i, n in enumerate(news[:5]): # 最新5件
-            print(f"[{i+1}] {n['display_date']} - {n['source']}")
-            print(f"    Title: {n.get('title_jp') or n.get('title')}")
-            print(f"    URL:   {n['url']}")
-            print()
+    main()

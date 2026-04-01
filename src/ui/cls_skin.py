@@ -328,12 +328,18 @@ def render_news_tab(ticker):
     for item in news_list:
         sentiment = item.get("sentiment", "neutral")
         icon = sentiment_icons.get(sentiment, "⚪")
+        display_title = item.get("display_title") or item.get("title_jp") or item.get("title")
+        has_translation = bool(item.get("title_jp")) and item.get("title_jp") != item.get("title")
+        original_title_html = (
+            f'<div class="news-orig">Original: {item.get("title", "")}</div>'
+            if has_translation else ""
+        )
         
         st.markdown(f"""
         <div class="news-card">
             <div class="news-title">
                 <a href="{item['url']}" target="_blank" style="text-decoration:none; color:inherit;">
-                    {icon} {item['title']}
+                    {icon} {display_title}
                 </a>
             </div>
             <div class="news-meta">
@@ -341,6 +347,7 @@ def render_news_tab(ticker):
                 <span>📡 {item['source']}</span>
                 <span>📊 Score: {item.get('score', 0):.2f}</span>
             </div>
+            {original_title_html}
         </div>
         """, unsafe_allow_html=True)
     

@@ -36,6 +36,8 @@ def get_latest_news_from_db(ticker: str, limit: int = 20) -> List[Dict[str, Any]
                 # 指定されたキーを含む辞書を構築
                 news_list.append({
                     "title":        a.title,
+                    "title_jp":     a.title_jp,
+                    "display_title": a.display_title,
                     "url":          a.url,
                     "sentiment":    a.sentiment,
                     "score":        a.score,

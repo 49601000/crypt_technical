@@ -333,6 +333,14 @@ def update_news_to_db(ticker: str, count: int = 20) -> int:
                 # URLで重複チェック
                 exists = session.query(Article).filter(Article.url == item["url"]).first()
                 if exists:
+                    updated = False
+                    incoming_title_jp = item.get("title_jp")
+                    if incoming_title_jp and not exists.title_jp:
+                        exists.title_jp = incoming_title_jp
+                        exists.lang = "ja"
+                        updated = True
+                    if updated:
+                        session.add(exists)
                     continue
                 
                 # 感情分析 (正規化ティッカー付きで処理)

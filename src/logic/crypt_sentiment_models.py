@@ -45,6 +45,11 @@ class Article(Base):
         Index("ix_ticker_published", "ticker", "published_at"),
     )
 
+    @property
+    def display_title(self) -> str:
+        """UI表示用の優先タイトル（日本語翻訳があればそちらを優先）。"""
+        return self.title_jp or self.title
+
 
 class CrawlJob(Base):
     """クロールジョブ履歴テーブル"""

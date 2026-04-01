@@ -153,11 +153,12 @@ def process_article_data(article: Union[Dict[str, Any], "Article"]) -> Dict[str,
         ticker    = getattr(article, "ticker", None)
 
     # 言語別テキストの選択
-    # 日本語設定で翻訳がある場合は優先的に日本語辞書を使用
-    if lang == "ja" and title_jp:
+    # title_jp があれば lang の指定に関係なく優先利用し、翻訳済みニュースを確実に日本語辞書で判定する。
+    has_title_jp = isinstance(title_jp, str) and bool(title_jp.strip())
+    if has_title_jp:
         target_text = f"{title_jp} {summary or ''}"
         analysis_lang = "ja"
-    elif lang == "ja":
+    elif (lang or "").lower() == "ja":
         target_text = f"{title} {summary or ''}"
         analysis_lang = "ja"
     else:

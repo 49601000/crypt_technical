@@ -59,8 +59,15 @@ class CrawlJob(Base):
     error_msg   = Column(Text, nullable=True)
 
 
+# 自動的にテーブルを作成（開発/個人利用の利便性のため）
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"Error initializing DB tables: {e}")
+
+
 def init_db():
-    """テーブル作成"""
+    """テーブル作成（手動呼び出し用）"""
     Base.metadata.create_all(bind=engine)
     print("✅ Database initialized")
 

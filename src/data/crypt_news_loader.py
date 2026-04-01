@@ -27,6 +27,7 @@ NEWS_TICKER_OVERRIDES = {
     "SOL-JPY": "SOL-USD",
     "HBAR-JPY": "HBAR-USD",
 }
+_YF_CACHE_CONFIGURED = False
 
 # ─── 内部ヘルパー ───────────────────────────────────────────
 
@@ -69,6 +70,25 @@ def _attach_normalized_symbol_meta(
         item["normalized_symbol"] = normalized_symbol
         item["normalized_ticker"] = normalized_ticker
     return news_list
+
+def _configure_yfinance_cache_dir() -> None:
+    """
+    yfinance のキャッシュ保存先を、書き込み可能なローカルディレクトリへ設定します。
+    一部実行環境ではデフォルト保存先に書き込めず、ニュース取得が失敗するための対策です。
+    """
+    global _YF_CACHE_CONFIGURED
+    if _YF_CACHE_CONFIGURED:
+        return
+
+    try:
+        cache_dir = Path(_ROOT_DIR) / "tmp" / "yfinance-cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        # yfinanceの公開API名は set_tz_cache_location だが、内部で全キャッシュ先を切り替える
+        yf.set_tz_cache_location(str(cache_dir))
+        _YF_CACHE_CONFIGURED = True
+    except Exception as e:
+        # 設定失敗時はログのみ。後続の取得処理側で通常の例外ハンドリングに委ねる。
+        print(f"yfinance cache setup warning: {e}")
 
 # ─── 翻訳アルゴリズム ───────────────────────────────────────
 
@@ -181,6 +201,7 @@ def _fetch_massive_news(symbol: str, count: int, before_date: Optional[datetime]
 def _fetch_yf_news(symbol: str, count: int, before_date: Optional[datetime]) -> List[Dict[str, Any]]:
     """yfinance からニュースを取得します。"""
     try:
+        _configure_yfinance_cache_dir()
         ticker = yf.Ticker(symbol)
         raw_news = ticker.news or []
         

@@ -1,3 +1,12 @@
+import sys
+import os
+from pathlib import Path
+
+# --- パス設定 (ProjectRoot を sys.path に追加) ---
+_ROOT_DIR = str(Path(__file__).resolve().parent.parent.parent)
+if _ROOT_DIR not in sys.path:
+    sys.path.insert(0, _ROOT_DIR)
+
 import requests
 import yfinance as yf
 import streamlit as st
@@ -139,31 +148,62 @@ def _fetch_yf_news(symbol: str, count: int, before_date: Optional[datetime]) -> 
     """yfinance からニュースを取得します。"""
     try:
         ticker = yf.Ticker(symbol)
-        yf_news = ticker.news or []
+        raw_news = ticker.news or []
         
         formatted = []
-        for n in yf_news:
-            ts = n.get("providerPublishTime")
-            if ts:
-                dt_utc = datetime.fromtimestamp(ts, tz=timezone.utc)
+        for n in raw_news:
+            # yfinance v0.2.x+ の新しい構造への対応
+            content = n.get("content", {})
+            if content:
+                # 新しい構造
+                title = content.get("title", "No Title")
+                
+                # canonicalUrl または clickThroughUrl は辞書の場合がある
+                url_obj = content.get("canonicalUrl") or content.get("clickThroughUrl")
+                if isinstance(url_obj, dict):
+                    url = url_obj.get("url")
+                else:
+                    url = url_obj
+                
+                source_obj = content.get("provider", {})
+                if isinstance(source_obj, dict):
+                    source = source_obj.get("displayName", "Yahoo Finance")
+                else:
+                    source = "Yahoo Finance"
+                
+                raw_date = content.get("pubDate")
+                try:
+                    # ISO 8601 形式: 2026-04-01T08:00:00Z
+                    dt_utc = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+                except (ValueError, TypeError):
+                    dt_utc = datetime.now(timezone.utc)
             else:
-                dt_utc = datetime.now(timezone.utc)
+                # 旧構造
+                title = n.get("title", "No Title")
+                url = n.get("link")
+                source = n.get("publisher", "Yahoo Finance")
+                ts = n.get("providerPublishTime")
+                if ts:
+                    dt_utc = datetime.fromtimestamp(ts, tz=timezone.utc)
+                else:
+                    dt_utc = datetime.now(timezone.utc)
                 
             dt_jst = _utc_to_jst(dt_utc)
             
-            # before_date によるフィルタリング
             if before_date and dt_jst >= _utc_to_jst(before_date):
                 continue
 
+            if not url:
+                continue
+
             formatted.append({
-                "title": n.get("title", "No Title"),
-                "url": n.get("link"),
-                "source": n.get("publisher", "Yahoo Finance"),
+                "title": title,
+                "url": url,
+                "source": source,
                 "published_at": dt_jst,
                 "display_date": _format_display_date(dt_jst)
             })
         
-        # 件数制限
         return formatted[:count]
     except Exception as e:
         print(f"yfinance News Error: {e}")
@@ -268,9 +308,11 @@ if __name__ == "__main__":
     
     if isinstance(news, dict) and news.get("status") == "error":
         print(f"Error: {news['message']}")
+    elif not news:
+        print("No news found.")
     else:
         for i, n in enumerate(news[:5]): # 最新5件
             print(f"[{i+1}] {n['display_date']} - {n['source']}")
-            print(f"    Title: {n['title']}")
+            print(f"    Title: {n.get('title_jp') or n.get('title')}")
             print(f"    URL:   {n['url']}")
             print()

@@ -15,6 +15,9 @@ if __name__ == "__main__":
 # 既存モジュールのインポート
 from src.logic.crypt_analytics import analyze_market
 
+def _normalize_ticker(symbol: str) -> str:
+    """表示用シンボルからDB連携用のベースティッカーへ正規化。"""
+    return (symbol or "").upper().replace(".T", "").split("-")[0]
 
 def evaluate_investment(analysis_result: Dict[str, Any], symbol: str = "UNKNOWN") -> Dict[str, Any]:
     """
@@ -33,6 +36,7 @@ def evaluate_investment(analysis_result: Dict[str, Any], symbol: str = "UNKNOWN"
     total_score = analysis_result.get("technical_score", 0)
     is_veto = analysis_result.get("is_veto_active", False)
     vetos = analysis_result.get("veto_reasons", {})
+    normalized_ticker = _normalize_ticker(symbol)
     
     # 2. 最終判定の決定ロジック
     judgement = "WATCH"
@@ -63,7 +67,8 @@ def evaluate_investment(analysis_result: Dict[str, Any], symbol: str = "UNKNOWN"
         },
         "market_snapshot": {
             **analysis_result.get("market_snapshot", {}),
-            "ticker": symbol
+            "ticker": symbol,
+            "normalized_ticker": normalized_ticker
         }
     }
 

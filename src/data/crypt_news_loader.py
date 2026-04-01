@@ -16,13 +16,17 @@ from typing import List, Dict, Any, Union, Optional
 from googletrans import Translator
 from src.utils.crypt_dic_error import get_error_response
 from src.logic.crypt_sentiment_models import SessionLocal, Article
-from src.logic.crypt_sentiment import analyze_sentiment
+from src.logic.crypt_sentiment import process_article_data
 
 # ─── 設定 ───────────────────────────────────────────────────
 
 MASSIVE_NEWS_URL = "https://api.massive.com/v1/benzinga/v2/news"
 JST = timezone(timedelta(hours=9))
 SEPARATOR = " ||| "
+NEWS_TICKER_OVERRIDES = {
+    "SOL-JPY": "SOL-USD",
+    "HBAR-JPY": "HBAR-USD",
+}
 
 # ─── 内部ヘルパー ───────────────────────────────────────────
 
@@ -35,6 +39,36 @@ def _utc_to_jst(dt: datetime) -> datetime:
 def _format_display_date(dt: datetime) -> str:
     """表示用の日付文字列を生成します。"""
     return dt.strftime("%Y/%m/%d %H:%M") + " (JST)"
+
+def _normalize_news_symbol(symbol: str) -> str:
+    """
+    ニュース取得に使うシンボルを正規化します。
+    要件:
+      - SOL-JPY  -> SOL-USD
+      - HBAR-JPY -> HBAR-USD
+    """
+    if not symbol:
+        return symbol
+    return NEWS_TICKER_OVERRIDES.get(symbol.upper(), symbol.upper())
+
+def _normalize_base_ticker(ticker: str) -> str:
+    """DB保存や分析用のベースティッカー（例: SOL）へ正規化します。"""
+    if not ticker:
+        return ticker
+    return ticker.upper().split("-")[0].replace(".T", "")
+
+def _attach_normalized_symbol_meta(
+    news_list: List[Dict[str, Any]],
+    request_symbol: str,
+    normalized_symbol: str,
+) -> List[Dict[str, Any]]:
+    """ニュース返却データへシンボル正規化情報を付与します。"""
+    normalized_ticker = _normalize_base_ticker(normalized_symbol)
+    for item in news_list:
+        item["request_symbol"] = request_symbol
+        item["normalized_symbol"] = normalized_symbol
+        item["normalized_ticker"] = normalized_ticker
+    return news_list
 
 # ─── 翻訳アルゴリズム ───────────────────────────────────────
 
@@ -211,13 +245,21 @@ def _fetch_yf_news(symbol: str, count: int, before_date: Optional[datetime]) -> 
 
 # ─── メイン関数 ────────────────────────────────────────────
 
-def get_crypto_news(symbol: str, count: int = 20, before_date: datetime = None) -> List[Dict[str, Any]]:
+def get_crypto_news(
+    symbol: str,
+    count: int = 20,
+    before_date: datetime = None,
+    normalize_for_jpy: bool = True,
+) -> List[Dict[str, Any]]:
     """
     複数ソースからニュースを取得・統合・翻訳して返却します。
     """
+    request_symbol = (symbol or "").upper()
+    news_symbol = _normalize_news_symbol(request_symbol) if normalize_for_jpy else request_symbol
+
     # 1. 各ソースから取得
-    massive_res = _fetch_massive_news(symbol, count, before_date)
-    yf_res = _fetch_yf_news(symbol, count, before_date)
+    massive_res = _fetch_massive_news(news_symbol, count, before_date)
+    yf_res = _fetch_yf_news(news_symbol, count, before_date)
     
     # 2. 統合
     combined = massive_res + yf_res
@@ -239,6 +281,11 @@ def get_crypto_news(symbol: str, count: int = 20, before_date: datetime = None) 
     
     # 6. 一括翻訳
     translated_news = _translate_titles_batch(target_news)
+    translated_news = _attach_normalized_symbol_meta(
+        translated_news,
+        request_symbol=request_symbol,
+        normalized_symbol=news_symbol
+    )
     
     return translated_news
 
@@ -249,8 +296,10 @@ def update_news_to_db(ticker: str, count: int = 20) -> int:
     ※ ticker は正規化済み（例: 'SOL'）であることを想定しています。
     """
     added_count = 0
-    # 1. ニュースの取得 (yfinance用のシンボルを一時的に作成)
-    fetch_symbol = f"{ticker}-USD"
+    normalized_ticker = _normalize_base_ticker(ticker)
+
+    # 1. ニュースの取得 (SOL-JPY/HBAR-JPY などは get_crypto_news 内で USD に正規化)
+    fetch_symbol = f"{normalized_ticker}-USD"
     news_list = get_crypto_news(fetch_symbol, count)
     
     if not news_list:
@@ -265,14 +314,22 @@ def update_news_to_db(ticker: str, count: int = 20) -> int:
                 if exists:
                     continue
                 
-                # 感情分析 (翻訳後のタイトルがあればそれを使用)
-                analysis_text = item.get("title_jp") or item.get("title", "")
+                # 感情分析 (正規化ティッカー付きで処理)
+                analyzed = process_article_data({
+                    "title": item.get("title", ""),
+                    "summary": "",
+                    "title_jp": item.get("title_jp"),
+                    "lang": "ja" if item.get("title_jp") else "en",
+                    "normalized_ticker": item.get("normalized_ticker") or normalized_ticker,
+                })
+                label = analyzed["sentiment"]
+                score = analyzed["score"]
+                article_ticker = analyzed.get("normalized_ticker") or normalized_ticker
                 analysis_lang = "ja" if item.get("title_jp") else "en"
-                label, score = analyze_sentiment(analysis_text, analysis_lang)
                 
                 # 新規記事の作成
                 new_article = Article(
-                    ticker=ticker.upper(),
+                    ticker=article_ticker,
                     title=item["title"],
                     title_jp=item.get("title_jp"),
                     url=item["url"],

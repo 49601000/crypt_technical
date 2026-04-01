@@ -349,13 +349,11 @@ def render_news_tab(ticker):
         col_btn, col_info = st.columns([1, 2])
         with col_btn:
             if st.button("Load More (さらに20件表示)", use_container_width=True):
-                # サイドバーで選択中のティッカーからベースを抽出
-                base_ticker = ticker.split("-")[0]
                 new_limit = st.session_state.get("news_limit", 20) + 20
                 st.session_state.news_limit = new_limit
                 
                 with st.spinner("追加分を取得中..."):
-                    new_items = get_latest_news_from_db(base_ticker, limit=new_limit)
+                    new_items = get_latest_news_from_db(ticker, limit=new_limit)
                     
                     if len(new_items) > len(news_list):
                         st.session_state.news_list = new_items
@@ -404,8 +402,8 @@ def render_crypto_report(report):
         render_analysis_tab(indicators, descriptions)
     
     with tab_news:
-        # ticker を安全に取得し、render_news_tab に渡す
-        target_ticker = snapshot.get("ticker", "UNKNOWN")
+        # ニュース表示は正規化済みティッカーを優先使用
+        target_ticker = snapshot.get("normalized_ticker") or snapshot.get("ticker", "UNKNOWN")
         render_news_tab(target_ticker)
 
 def run():
@@ -426,13 +424,9 @@ def run():
         st.markdown("---")
         if st.button("♻️ ニュースを更新", use_container_width=True):
             try:
-                # 1. ティッカーの正規化 (UI側の責務)
-                # "SOL-JPY" -> "SOL"
-                normalized_ticker = ticker.split("-")[0].upper()
-                
-                with st.spinner(f"{normalized_ticker} のニュースを取得中..."):
+                with st.spinner(f"{ticker} のニュースを取得中..."):
                     # 2. ロジック実行 (DB保存件数を取得)
-                    added_count = update_news_to_db(normalized_ticker)
+                    added_count = update_news_to_db(ticker)
                     
                     # 3. ユーザーフィードバック
                     if added_count > 0:
@@ -457,10 +451,10 @@ def run():
                     return
                 
                 # 2. ニュース初期データの取得 (セッション最適化)
-                # ティッカーからベース (SOLなど) を抽出してDB問い合わせ
-                base_ticker = ticker.split("-")[0]
+                snapshot = report.get("level_1_judgement", {}).get("market_snapshot", {})
+                query_ticker = snapshot.get("normalized_ticker") or ticker
                 st.session_state.news_limit = 20
-                st.session_state.news_list = get_latest_news_from_db(base_ticker, limit=20)
+                st.session_state.news_list = get_latest_news_from_db(query_ticker, limit=20)
         
         render_crypto_report(st.session_state["report"])
     else:

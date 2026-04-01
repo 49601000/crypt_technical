@@ -11,8 +11,8 @@ def get_latest_news_from_db(ticker: str, limit: int = 20) -> List[Dict[str, Any]
     データベースから特定のティッカーに関連する最新のニュース記事を取得し、
     UI表示に適した辞書形式のリストで返却します。
     """
-    # ティッカーを大文字に正規化
-    normalized_ticker = ticker.upper()
+    # ここでは正規化済みティッカー（例: SOL, HBAR）を受け取る前提
+    query_ticker = (ticker or "").upper()
     news_list = []
     
     try:
@@ -20,7 +20,7 @@ def get_latest_news_from_db(ticker: str, limit: int = 20) -> List[Dict[str, Any]
         with SessionLocal() as session:
             articles = (
                 session.query(Article)
-                .filter(Article.ticker == normalized_ticker)
+                .filter(Article.ticker == query_ticker)
                 .order_by(desc(Article.published_at))
                 .limit(limit)
                 .all()

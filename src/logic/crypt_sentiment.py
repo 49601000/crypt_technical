@@ -68,6 +68,12 @@ RELEVANT_KEYWORDS: Dict[str, List[str]] = {
     "ETH": ["ETH", "Ethereum", "イーサリアム"],
 }
 
+def _normalize_ticker_for_lookup(ticker: Optional[str]) -> Optional[str]:
+    """関連判定や保存用途向けにティッカーを正規化（例: SOL-JPY -> SOL）。"""
+    if not ticker:
+        return None
+    return ticker.upper().replace(".T", "").split("-")[0]
+
 # ──────────────────────────────────────────
 # 内部ロジック
 # ──────────────────────────────────────────
@@ -120,7 +126,7 @@ def analyze_sentiment(text: str, lang: str = "en") -> tuple[str, float]:
 
 def is_relevant(title: str, ticker: str) -> bool:
     """タイトルが指定した通貨に関連しているかチェック"""
-    target_ticker = ticker.upper().replace(".T", "")
+    target_ticker = _normalize_ticker_for_lookup(ticker) or ""
     keywords = RELEVANT_KEYWORDS.get(target_ticker, [target_ticker])
     title_upper = title.upper()
     return any(kw.upper() in title_upper for kw in keywords)
@@ -136,6 +142,7 @@ def process_article_data(article: Union[Dict[str, Any], "Article"]) -> Dict[str,
         summary   = article.get("summary", "")
         title_jp  = article.get("title_jp")
         lang      = article.get("lang", "en")
+        ticker    = article.get("normalized_ticker") or article.get("ticker")
     else:
         a_id      = getattr(article, "id", None)
         title     = getattr(article, "title", "")
@@ -143,6 +150,7 @@ def process_article_data(article: Union[Dict[str, Any], "Article"]) -> Dict[str,
         # モデルに title_jp カラムがない場合は None
         title_jp  = getattr(article, "title_jp", None)
         lang      = getattr(article, "lang", "en")
+        ticker    = getattr(article, "ticker", None)
 
     # 言語別テキストの選択
     # 日本語設定で翻訳がある場合は優先的に日本語辞書を使用
@@ -157,10 +165,12 @@ def process_article_data(article: Union[Dict[str, Any], "Article"]) -> Dict[str,
         analysis_lang = "en"
 
     label, score = analyze_sentiment(target_text, analysis_lang)
+    normalized_ticker = _normalize_ticker_for_lookup(ticker)
 
     # Articleモデルの更新用カラム名に合わせた辞書
     return {
         "id":           a_id,
+        "normalized_ticker": normalized_ticker,
         "sentiment":    label,
         "score":        score,
         "is_processed": True
